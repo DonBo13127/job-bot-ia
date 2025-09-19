@@ -6,13 +6,10 @@ import time
 
 
 # -----------------------------
-# Scraper 1 : Welcome to the Jungle (FR) - Full Remote + Tech IA
+# 1. Welcome to the Jungle (FR) - https://wttj.fr
 # -----------------------------
 def scrape_wttj():
-    """
-    Scraping des offres sur Welcome to the Jungle
-    Recherche : automation, IA, scraping, agent IA, etc.
-    """
+    """Scrape les offres sur welcome to the jungle (FR)"""
     url = "https://www.welcometothejungle.com/fr/jobs?query=ia%20automation%20scraping&refinementList%5Bremote%5D%5B%5D=remote"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36"
@@ -25,41 +22,37 @@ def scrape_wttj():
 
         for job in soup.select('a[data-testid="job-card"]'):
             title_elem = job.select_one('h2')
-            company_elem = job.select_one('span.sc-gyigFi')  # ou autre classe dynamique
-            location_elem = job.select_one('li span + span')  # localisation
+            company_elem = job.select_one('span[data-testid="job-card-company-name"]')
+            location_elem = job.select_one('li span + span')
 
             title = title_elem.get_text(strip=True) if title_elem else "N/A"
             company = company_elem.get_text(strip=True) if company_elem else "N/A"
-            location = location_elem.get_text(strip=True) if location_elem else ""
+            location = location_elem.get_text(strip=True).lower() if location_elem else ""
             link = urljoin("https://www.welcometothejungle.com", job['href'])
 
-            # Mots-clés pertinents
             keywords = ['scrap', 'auto', 'ia', 'bot', 'agent', 'intelligence artificielle', 'automatisation', 'rpa', 'llm']
-            text_lower = (title + ' ' + company).lower()
+            text_lower = f"{title} {company}".lower()
 
-            if any(kw in text_lower for kw in keywords):
-                if "remote" in text_lower or "télétravail" in text_lower or "worldwide" in location.lower():
-                    jobs.append({
-                        "title": title,
-                        "company": company,
-                        "url": link,
-                        "location": "Remote",
-                        "language": "fr",
-                        "site": "wttj"
-                    })
+            if any(kw in text_lower for kw in keywords) and ("remote" in location or "télétravail" in location):
+                jobs.append({
+                    "title": title,
+                    "company": company,
+                    "url": link,
+                    "location": "Remote",
+                    "language": "fr",
+                    "site": "wttj"
+                })
     except Exception as e:
-        print(f"[WTTJ] Erreur de scraping : {e}")
+        print(f"[WTTJ] Erreur : {e}")
     return jobs
 
 
 # -----------------------------
-# Scraper 2 : Meteors.dev (Dev IA / Agents / Remote)
+# 2. Meteors AI (Global) - https://www.meteors.ai
 # -----------------------------
 def scrape_meteors():
-    """
-    Meteors.dev : Offres tech IA, souvent en anglais mais cibles francophones
-    """
-    url = "https://meteors.dev/jobs"
+    """Scrape meteors.ai - Agents IA & Automatisation"""
+    url = "https://www.meteors.ai/jobs"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36"
     }
@@ -69,26 +62,21 @@ def scrape_meteors():
         r.raise_for_status()
         soup = BeautifulSoup(r.text, 'html.parser')
 
-        for job in soup.select('.job-listing'):
+        for job in soup.select('.job-card'):
             title_elem = job.select_one('h3 a')
             company_elem = job.select_one('.company-name')
-            tag_elems = [t.get_text(strip=True).lower() for t in job.select('.tag')]
-            remote = any('remote' in t for t in tag_elems)
 
             title = title_elem.get_text(strip=True) if title_elem else "N/A"
             company = company_elem.get_text(strip=True) if company_elem else "N/A"
-            link = urljoin("https://meteors.dev", title_elem['href']) if title_elem and title_elem.get('href') else None
+            link = urljoin("https://www.meteors.ai", title_elem['href']) if title_elem and title_elem.get('href') else None
 
             if not link:
                 continue
 
-            keywords = ['scrap', 'auto', 'ia', 'agent', 'ai', 'automation', 'bot', 'crawler', 'llm']
-            if any(kw in (title + ' ' + ' '.join(tag_elems)).lower() for kw in keywords) and remote:
+            if any(kw in f"{title} {company}".lower() for kw in ['scrap', 'auto', 'ia', 'agent', 'ai', 'automation', 'bot']):
                 language = "en"
-                if any(c in title for c in ['á', 'é', 'ñ', 'ó', 'ú', '¡', '¿']):  # Espagnol approximatif
-                    language = "es"
-                elif any(c in ['é', 'à', 'ù', 'ê', 'î'] for c in title):
-                    language = "fr"
+                if any(c in 'áéíóúñ¡¿' for c in title): language = "es"
+                elif any(c in 'àâäéêèûù' for c in title): language = "fr"
 
                 jobs.append({
                     "title": title,
@@ -99,18 +87,16 @@ def scrape_meteors():
                     "site": "meteors"
                 })
     except Exception as e:
-        print(f"[Meteors] Erreur de scraping : {e}")
+        print(f"[Meteors] Erreur : {e}")
     return jobs
 
 
 # -----------------------------
-# Scraper 3 : Remotive.io (Remote jobs)
+# 3. Remotive (Global) - https://remotive.io
 # -----------------------------
 def scrape_remotive():
-    """
-    Remotive : Catégorie "AI / Machine Learning"
-    """
-    url = "https://remotive.io/remote-jobs/ai-machine-learning"
+    """Scrape remotive.io - Catégorie Intelligence Artificielle"""
+    url = "https://remotive.io/remote-jobs?category=artificial-intelligence"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36"
     }
@@ -120,17 +106,19 @@ def scrape_remotive():
         r.raise_for_status()
         soup = BeautifulSoup(r.text, 'html.parser')
 
-        for job in soup.select('.job-tile'):
-            title_elem = job.select_one('.position')
-            company_elem = job.select_one('.company')
-            detail_url = job.select_one('a')['href']
+        for job in soup.select('.job'):
+            title_elem = job.select_one('h3')
+            company_elem = job.select_one('.company_name')
+            detail_url = job.select_one('a')['href'] if job.select_one('a') else None
 
             title = title_elem.get_text(strip=True) if title_elem else "N/A"
             company = company_elem.get_text(strip=True) if company_elem else "N/A"
-            link = urljoin("https://remotive.io", detail_url)
+            link = urljoin("https://remotive.io", detail_url) if detail_url else None
 
-            keywords = ['scrap', 'auto', 'ia', 'agent', 'ai', 'automation', 'bot', 'data extraction']
-            if any(kw in title.lower() for kw in keywords):
+            if not link:
+                continue
+
+            if any(kw in title.lower() for kw in ['scrap', 'auto', 'ia', 'agent', 'ai', 'automation', 'bot', 'crawler']):
                 jobs.append({
                     "title": title,
                     "company": company,
@@ -140,18 +128,16 @@ def scrape_remotive():
                     "site": "remotive"
                 })
     except Exception as e:
-        print(f"[Remotive] Erreur de scraping : {e}")
+        print(f"[Remotive] Erreur : {e}")
     return jobs
 
 
 # -----------------------------
-# Scraper 4 : YesWeRemote (France & Europe Remote)
+# 4. YesWeRemote (FR) - https://yesweremote.fr
 # -----------------------------
 def scrape_yesweremote():
-    """
-    YesWeRemote : Startups françaises en remote
-    """
-    url = "https://yesweremote.com/jobs?search=ai+automation"
+    """Scrape yesweremote.fr - Startups françaises en remote"""
+    url = "https://yesweremote.fr/jobs?search=ia+automatisation"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36"
     }
@@ -161,22 +147,15 @@ def scrape_yesweremote():
         r.raise_for_status()
         soup = BeautifulSoup(r.text, 'html.parser')
 
-        for job in soup.select('a[href^="/jobs/detail"]'):
+        for job in soup.select('a[href^="/jobs/"]'):
             title_elem = job.select_one('h2')
-            company_elem = job.select_one('div.flex-grow p')
-            location_elem = job.select_one('div.flex-shrink p')
+            company_elem = job.select_one('.text-gray-600')
 
             title = title_elem.get_text(strip=True) if title_elem else "N/A"
             company = company_elem.get_text(strip=True) if company_elem else "N/A"
-            location = location_elem.get_text(strip=True) if location_elem else ""
+            link = urljoin("https://yesweremote.fr", job['href'])
 
-            if "remote" not in location.lower():
-                continue
-
-            link = urljoin("https://yesweremote.com", job['href'])
-
-            keywords = ['scrap', 'auto', 'ia', 'agent', 'bot', 'automation', 'crawler']
-            if any(kw in title.lower() for kw in keywords):
+            if any(kw in title.lower() for kw in ['scrap', 'auto', 'ia', 'agent', 'automation']):
                 jobs.append({
                     "title": title,
                     "company": company,
@@ -186,7 +165,7 @@ def scrape_yesweremote():
                     "site": "yesweremote"
                 })
     except Exception as e:
-        print(f"[YesWeRemote] Erreur de scraping : {e}")
+        print(f"[YesWeRemote] Erreur : {e}")
     return jobs
 
 
@@ -195,22 +174,26 @@ def scrape_yesweremote():
 # -----------------------------
 def scrape_all():
     """
-    Lance tous les scrapers et retourne une liste unique d'offres
+    Lance tous les scrapers et retourne une liste unique d'offres.
+    Ajoute un délai entre chaque site pour éviter les blocages.
     """
     all_jobs = []
     scrapers = [
         ("Welcome to the Jungle", scrape_wttj),
-        ("Meteors", scrape_meteors),
+        ("Meteors AI", scrape_meteors),
         ("Remotive", scrape_remotive),
         ("YesWeRemote", scrape_yesweremote)
     ]
 
     for name, scraper in scrapers:
         print(f"[{name}] Scraping en cours...")
-        jobs = scraper()
-        print(f"[{name}] {len(jobs)} offres trouvées.")
-        all_jobs.extend(jobs)
-        time.sleep(2)  # Respectons les serveurs
+        try:
+            jobs = scraper()
+            print(f"[{name}] ✅ {len(jobs)} offre(s) trouvée(s).")
+            all_jobs.extend(jobs)
+        except Exception as e:
+            print(f"[{name}] ❌ Échec: {e}")
+        time.sleep(3)  # Respectons les serveurs
 
-    print(f"[Total] {len(all_jobs)} offres collectées.")
+    print(f"\n[Total] 🎯 {len(all_jobs)} offre(s) collectée(s).")
     return all_jobs
