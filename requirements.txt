@@ -1,0 +1,7 @@
+requests
+beautifulsoup4
+openai
+notion-client
+python-dotenv
+lxml
+markdownify
