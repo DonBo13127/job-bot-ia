@@ -1,37 +1,29 @@
 import smtplib
 from email.message import EmailMessage
-import os
-import mimetypes
+from email.utils import make_msgid
+import requests
 
-SMTP_EMAIL = os.getenv("SMTP_EMAIL")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
-
-def send_email_gmail(to_email, subject, html_content, attachment_url):
-    if not to_email:
-        print("[Email] Aucun email trouvé pour cette offre, skipped.")
-        return
-
+def send_email_gmail(to_email, subject, html_content, gmail_email, gmail_app_password, cv_file_link):
     msg = EmailMessage()
     msg["Subject"] = subject
-    msg["From"] = SMTP_EMAIL
+    msg["From"] = gmail_email
     msg["To"] = to_email
-    msg.set_content("Votre client email ne supporte pas le HTML")
+
     msg.add_alternative(html_content, subtype="html")
 
-    # Télécharger et attacher le fichier CV
+    # Ajouter le CV en pièce jointe
     try:
-        import requests
-        r = requests.get(attachment_url)
-        filename = attachment_url.split("/")[-1]
-        mime_type, _ = mimetypes.guess_type(filename)
-        maintype, subtype = mime_type.split("/", 1)
-        msg.add_attachment(r.content, maintype=maintype, subtype=subtype, filename=filename)
+        r = requests.get(cv_file_link)
+        if r.status_code == 200:
+            msg.add_attachment(r.content, maintype="application", subtype="pdf", filename="CV.pdf")
     except Exception as e:
-        print(f"[Email] Erreur téléchargement CV : {e}")
+        print(f"[Email] Erreur en attachant le CV : {e}")
 
+    # Envoi via Gmail
     try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(SMTP_EMAIL, SMTP_PASSWORD)
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()
+            server.login(gmail_email, gmail_app_password)
             server.send_message(msg)
         print(f"📩 Email envoyé à {to_email}")
     except Exception as e:
