@@ -1,101 +1,67 @@
 import os
-import time
 import smtplib
 from email.message import EmailMessage
-from datetime import datetime
 import schedule
-
+import time
 from scraper import scrape_ai_with_email
 from gpt_utils import generate_cover_letter_html
-from sheets_utils import connect_sheets_by_id, save_job_to_sheet
-
-# ===========================
-# Variables d'environnement
-# ===========================
-SMTP_EMAIL = os.getenv("SMTP_EMAIL")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
-CV_LINK_FR = os.getenv("CV_LINK_FR")
-CV_LINK_ES = os.getenv("CV_LINK_ES")
-GPT_API_KEY = os.getenv("OPENAI_API_KEY")
+from sheets_utils import connect_sheets, save_job
 
 SHEET_JSON = "absolute-bonsai-459420-q4-dddac3ebbb21.json"
-SHEET_ID = "1Rgd-OuFHA-nXaBPBaZyVlFv7cTsphHScPih4-jn9st8"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1Rgd-OuFHA-nXaBPBaZyVlFv7cTsphHScPih4-jn9st8/edit"
+SMTP_EMAIL = os.getenv("SMTP_EMAIL")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 
-IMAGE_URL = "https://img.freepik.com/photos-gratuite/specialiste-informatique-dans-ferme-serveurs-minimisant-defaillances-machines_264385749.htm"
+def detect_language(title):
+    title = title.lower()
+    if any(w in title for w in ["ingeniero", "automatización", "pruebas", "tecnología"]):
+        return "es"
+    return "fr"
 
-# ===========================
-# Connexion Google Sheet
-# ===========================
-sheet = connect_sheets_by_id(SHEET_JSON, SHEET_ID)
-
-# ===========================
-# Fonction d'envoi email
-# ===========================
-def send_email(job, html_content, cv_link, language="fr"):
-    recipient = job.get("apply_email")
-    if not recipient:
-        print(f"[Email] Pas d'adresse pour {job.get('title')}")
-        return
-
+def send_email(job, html_content):
+    if not job.get("apply_email"):
+        return False
     msg = EmailMessage()
-    msg["Subject"] = f"Candidature : {job.get('title')}"
+    msg["Subject"] = f"Candidature : {job['title']}"
     msg["From"] = SMTP_EMAIL
-    msg["To"] = recipient
-
-    msg.set_content("Votre client email ne supporte pas le HTML.")
+    msg["To"] = job["apply_email"]
+    msg.set_content("Votre client email ne supporte pas HTML")
     msg.add_alternative(html_content, subtype="html")
 
-    # Ajouter les CV en pièce jointe
-    for cv_url in [CV_LINK_FR, CV_LINK_ES]:
-        try:
-            import requests
-            resp = requests.get(cv_url)
-            filename = cv_url.split("/")[-1]
-            msg.add_attachment(resp.content, maintype="application", subtype="pdf", filename=filename)
-        except Exception as e:
-            print(f"[Attachment] Erreur ajout CV {cv_url}: {e}")
+    # Ajouter CV en pièce jointe
+    import requests
+    from io import BytesIO
+    for cv_url in [os.getenv("CV_LINK_FR"), os.getenv("CV_LINK_ES")]:
+        resp = requests.get(cv_url)
+        if resp.status_code==200:
+            msg.add_attachment(resp.content, maintype="application", subtype="pdf", filename="CV.pdf")
+            break
 
     try:
         with smtplib.SMTP("smtp.gmail.com", 587) as server:
             server.starttls()
             server.login(SMTP_EMAIL, SMTP_PASSWORD)
             server.send_message(msg)
-        print(f"[Email] Envoyé : {job.get('title')} à {recipient}")
+        print(f"📩 Email envoyé à {job['apply_email']}")
+        return True
     except Exception as e:
         print(f"[Email] Erreur : {e}")
+        return False
 
-# ===========================
-# Fonction principale
-# ===========================
-def job_bot():
-    print(f"\n🚀 Démarrage du bot : {datetime.now()}")
+def job_runner():
+    print("🚀 Démarrage du bot IA...")
+    sheet = connect_sheets(SHEET_JSON, SHEET_URL)
     jobs = scrape_ai_with_email()
-    print(f"✅ {len(jobs)} annonces IA avec email trouvées.")
 
-    for job in jobs:
-        title = job.get("title")
-        print(f"\n💼 {title}")
+    for job_item in jobs:
+        lang = detect_language(job_item["title"])
+        html_letter = generate_cover_letter_html(job_item, lang)
+        if save_job(sheet, job_item, lang):
+            send_email(job_item, html_letter)
 
-        # Détection langue (fr/es)
-        language = "es" if any(w in title.lower() for w in ["ingeniero", "automatización"]) else "fr"
-
-        # Génération lettre HTML
-        html_content = generate_cover_letter_html(job, language, IMAGE_URL)
-
-        # Envoi email
-        send_email(job, html_content, CV_LINK_FR if language=="fr" else CV_LINK_ES, language)
-
-        # Sauvegarde Google Sheet
-        save_job_to_sheet(sheet, job, language)
-
-# ===========================
-# Scheduler toutes les heures
-# ===========================
-schedule.every(1).hours.do(job_bot)
-print("🕒 Scheduler activé : le bot s'exécutera toutes les heures.")
-
-# Première exécution immédiate
-job_bot()
+# Exécution toutes les heures
+schedule.every().hour.do(job_runner)
+print("🕒 Scheduler activé : exécution toutes les heures.")
 
 while True:
     schedule.run_pending()
