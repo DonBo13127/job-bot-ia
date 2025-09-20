@@ -1,47 +1,34 @@
 import openai
 import os
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-openai.api_key = OPENAI_API_KEY
+openai.api_key = os.getenv("OPENAI_API_KEY")
+CV_LINK_FR = os.getenv("CV_LINK_FR")
+CV_LINK_ES = os.getenv("CV_LINK_ES")
+IMAGE_URL = "https://image.freepik.com/photos-gratuite/specialiste-informatique-dans-ferme-serveurs-minimisant-defaillances-machines_264385749.htm"
 
-def generate_cover_letter_html(job, language="fr", image_url=None):
-    prompt_fr = f"""
-Rédige une lettre de motivation professionnelle courte pour postuler à ce poste :
-Titre : {job.get('title')}
-Entreprise : {job.get('company')}
-Offre : {job.get('url')}
-Utilise un ton dynamique et engageant, en mettant en avant mes compétences en IA.
-"""
-    prompt_es = f"""
-Escribe una carta de motivación breve y profesional para postular a este puesto:
-Puesto: {job.get('title')}
-Empresa: {job.get('company')}
-Oferta: {job.get('url')}
-Utiliza un tono dinámico y resalta mis habilidades en IA.
-"""
-    prompt = prompt_fr if language == "fr" else prompt_es
+def generate_cover_letter_html(job, language="fr"):
+    prompt = f"""
+    Rédige une lettre de motivation courte et professionnelle pour postuler à ce poste :
+    Titre : {job['title']}
+    Entreprise : {job['company']}
+    Offre : {job['url']}
+    Langue : {language}
+    """
+    response = openai.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role":"system","content":"Tu es un expert RH et copywriter."},
+                  {"role":"user","content":prompt}],
+        max_tokens=400
+    )
+    letter_text = response.choices[0].message.content.strip()
 
-    try:
-        response = openai.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role":"system","content":"Tu es un expert RH et copywriter."},
-                      {"role":"user","content":prompt}],
-            max_tokens=500
-        )
-        letter = response.choices[0].message.content.strip()
-    except Exception as e:
-        print(f"[GPT] Erreur : {e}")
-        letter = "Bonjour,\nJe souhaite postuler à cette offre."
-
-    # Création HTML avec image
+    cv_url = CV_LINK_FR if language=="fr" else CV_LINK_ES
     html = f"""
     <html>
-    <body style="font-family: Arial, sans-serif; line-height:1.5; color:#333;">
-        <h2 style="color:#2E86C1;">Candidature : {job.get('title')}</h2>
-        <h3>{job.get('company')}</h3>
-        <img src="{image_url}" alt="Image" style="max-width:600px; margin:15px 0;">
-        <p>{letter}</p>
-        <p>CV en pièce jointe.</p>
+    <body>
+        <p>{letter_text}</p>
+        <p><img src="{IMAGE_URL}" alt="IA" width="600"/></p>
+        <p>CV en pièce jointe : <a href="{cv_url}">Télécharger CV</a></p>
     </body>
     </html>
     """
