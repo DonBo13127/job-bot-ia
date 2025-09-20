@@ -1,39 +1,32 @@
 import os
 import smtplib
 from email.message import EmailMessage
-from langdetect import detect
+from scraper import scrape_all
 import openai
 import requests
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from scraper import scrape_all
-from datetime import datetime
+from datetime import datetime  # ✅ Ajouté pour l'erreur datetime
 
-# ===========================
 # Variables d'environnement
-# ===========================
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 SMTP_EMAIL = os.getenv("SMTP_EMAIL")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 CV_LINK_FR = os.getenv("CV_LINK_FR")
 CV_LINK_ES = os.getenv("CV_LINK_ES")
-SHEET_NAME = "Job Applications"  # Nom de ton Google Sheet
-CREDENTIALS_FILE = "absolute-bonsai-459420-q4-dddac3ebbb21.json"  # Ton JSON
+SHEET_NAME = "Job Applications"
 
-openai.api_key = OPENAI_API_KEY
-
-# ===========================
-# Connexion Google Sheets
-# ===========================
-scope = ["https://spreadsheets.google.com/feeds",
-         "https://www.googleapis.com/auth/drive"]
-
+# Google Sheets
+CREDENTIALS_FILE = "absolute-bonsai-459420-q4-dddac3ebbb21.json"
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
 client = gspread.authorize(creds)
 sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1Rgd-OuFHA-nXaBPBaZyVlFv7cTsphHScPih4-jn9st8/edit").sheet1
 
+openai.api_key = OPENAI_API_KEY
+
 # ===========================
-# Détection de langue
+# Détection de langue simple
 # ===========================
 def detect_language(job):
     title = job.get("title", "").lower()
@@ -42,34 +35,32 @@ def detect_language(job):
     return "fr"
 
 # ===========================
-# Génération lettre de motivation
+# Génération lettre + image
 # ===========================
 def generate_cover_letter(job, language="fr"):
     prompt_fr = f"""
-Rédige une lettre de motivation courte et professionnelle pour postuler à ce poste :
-Titre : {job.get('title')}
-Entreprise : {job.get('company')}
-Offre : {job.get('url')}
-Inclue une image illustrant un spécialiste informatique : https://fr.freepik.com/photos-gratuite/specialiste-informatique-dans-ferme-serveurs-minimisant-defaillances-machines_264385749.htm#fromView=search&page=1&position=5&uuid=f6600eb9-89a4-4b30-94a2-d917bd260646&query=IT
-"""
-
+    Tu es un spécialiste IA et RH. Rédige une lettre de motivation courte, percutante et professionnelle pour ce poste :
+    Titre : {job.get('title')}
+    Entreprise : {job.get('company')}
+    Offre : {job.get('url')}
+    Inclue subtilement un lien vers l'image suivante : 
+    https://www.freepik.com/photos-gratuite/specialiste-informatique-dans-ferme-serveurs-minimisant-defaillances-machines_264385749.htm
+    """
     prompt_es = f"""
-Escribe una carta de motivación breve y profesional para postular a este puesto:
-Puesto: {job.get('title')}
-Empresa: {job.get('company')}
-Oferta: {job.get('url')}
-Incluye una imagen que ilustre a un especialista en informática: https://fr.freepik.com/photos-gratuite/specialiste-informatique-dans-ferme-serveurs-minimisant-defaillances-machines_264385749.htm#fromView=search&page=1&position=5&uuid=f6600eb9-89a4-4b30-94a2-d917bd260646&query=IT
-"""
-
+    Eres un especialista en IA y RRHH. Escribe una carta de motivación breve, impactante y profesional para este puesto:
+    Puesto: {job.get('title')}
+    Empresa: {job.get('company')}
+    Oferta: {job.get('url')}
+    Incluye sutilmente un enlace a esta imagen:
+    https://www.freepik.com/photos-gratuite/specialiste-informatique-dans-ferme-serveurs-minimisant-defaillances-machines_264385749.htm
+    """
     prompt = prompt_fr if language == "fr" else prompt_es
 
     try:
         response = openai.chat.completions.create(
             model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "Tu es un assistant RH expert."},
-                {"role": "user", "content": prompt}
-            ],
+            messages=[{"role": "system", "content": "Tu es un assistant RH expert."},
+                      {"role": "user", "content": prompt}],
             max_tokens=300
         )
         return response.choices[0].message.content.strip()
@@ -89,9 +80,9 @@ def send_email(job, letter, language="fr"):
     msg.set_content(letter)
     cv_url = CV_LINK_FR if language == "fr" else CV_LINK_ES
     msg.add_alternative(f"""
-<p>{letter}</p>
-<p>Mon CV est disponible ici : <a href="{cv_url}">Télécharger CV</a></p>
-""", subtype="html")
+    <p>{letter}</p>
+    <p>Mon CV est disponible ici : <a href="{cv_url}">Télécharger CV</a></p>
+    """, subtype="html")
 
     try:
         with smtplib.SMTP("smtp.gmail.com", 587) as server:
@@ -103,28 +94,19 @@ def send_email(job, letter, language="fr"):
         print(f"[Email] Erreur : {e}")
 
 # ===========================
-# Sauvegarde dans Google Sheets
+# Sauvegarde Google Sheets
 # ===========================
 def save_to_sheet(job, language):
-    try:
-        # Vérifie doublon
-        records = sheet.get_all_records()
-        urls = [r.get("URL", "") for r in records]
-        if job.get("url") in urls:
-            print(f"⚠ Offre déjà sauvegardée : {job.get('title')}")
-            return
-        # Ajout
-        sheet.append_row([
-            job.get("title", ""),
-            job.get("company", ""),
-            job.get("source", ""),
-            job.get("url", ""),
-            language.upper(),
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        ])
-        print(f"🗂 Offre sauvegardée : {job.get('title')}")
-    except Exception as e:
-        print(f"[Sheets] Erreur : {e}")
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    sheet.append_row([
+        job.get("title"),
+        job.get("company"),
+        job.get("source", ""),
+        job.get("url"),
+        language.upper(),
+        now
+    ])
+    print(f"🗂 Offre enregistrée dans Google Sheets ({job.get('title')})")
 
 # ===========================
 # Main
@@ -137,15 +119,13 @@ def main():
         return
 
     print(f"✅ {len(jobs)} offres collectées.\n")
-
-    for i, job in enumerate(jobs[:5], 1):  # limite à 5 pour éviter le spam
+    for i, job in enumerate(jobs[:5], 1):
         print(f"\n--- Offre {i}/{len(jobs)} ---")
         print(f"💼 {job.get('title')} chez {job.get('company')} ({job.get('source')})")
 
         lang = detect_language(job)
         letter = generate_cover_letter(job, lang)
         print(f"📝 Lettre générée ({lang.upper()}) :\n{letter[:200]}...\n")
-
         send_email(job, letter, lang)
         save_to_sheet(job, lang)
 
