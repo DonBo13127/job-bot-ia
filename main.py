@@ -1,62 +1,67 @@
 import os
-import time
 import schedule
+import time
+from datetime import datetime
 from scraper import scrape_all_with_email  # Scraper uniquement les offres avec email
 from gpt_utils import generate_cover_letter_html
-from email_utils import send_email_with_attachments
+from email_utils import send_email_gmail
 from sheets_utils import connect_sheets, save_job
 
-# ===========================
-# Variables d'environnement
-# ===========================
-SHEET_JSON = os.getenv("SHEET_JSON")  # Chemin vers ton JSON
-SHEET_NAME = "Replit"  # Nom exact de ton Google Sheet
+# -----------------------------
+# Configuration Google Sheets
+# -----------------------------
+SHEET_JSON = "absolute-bonsai-459420-q4-dddac3ebbb21.json"
+SHEET_NAME = "Replit"
 
-# Connexion Google Sheets
 sheet = connect_sheets(SHEET_JSON, SHEET_NAME)
 
-# ===========================
+# -----------------------------
+# Variables
+# -----------------------------
+CV_LINK_FR = "https://www.dropbox.com/...fr.pdf?dl=0"
+CV_LINK_ES = "https://www.dropbox.com/...es.docx?dl=0"
+IMAGE_URL = "https://img.freepik.com/photos-gratuite/specialiste-informatique-dans-ferme-serveurs-minimisant-defaillances-machines_264385749.htm"
+
+# -----------------------------
 # Fonction principale
-# ===========================
-def job_runner():
-    print("\n🚀 Démarrage du bot de candidature automatique...\n")
-    jobs = scrape_all_with_email()
-    if not jobs:
-        print("📭 Aucune offre trouvée.")
-        return
-
-    print(f"✅ {len(jobs)} offres collectées.\n")
-
-    for i, job in enumerate(jobs, 1):
-        print(f"\n--- Offre {i}/{len(jobs)} ---")
-        print(f"💼 {job.get('title')} chez {job.get('company')} ({job.get('source')})")
-        print(f"📧 Email contact : {job.get('apply_email')}")
-
-        # Détection de langue
-        lang = "es" if any(w in job.get("title", "").lower() for w in ["ingeniero", "qa", "pruebas", "automatización"]) else "fr"
-
-        # Génération lettre + image
-        letter_html = generate_cover_letter_html(job, lang)
-
-        # Envoi email avec CV et image
-        send_email_with_attachments(job.get("apply_email"), letter_html, lang)
-
-        # Sauvegarde dans Google Sheets
+# -----------------------------
+def run_bot():
+    print(f"\n🚀 Démarrage du bot : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    jobs = scrape_all_with_email()  # renvoie uniquement les offres avec email
+    print(f"✅ {len(jobs)} offres collectées.")
+    
+    for job in jobs:
+        email = job.get("apply_email")
+        if not email:
+            continue  # skip si pas d'email
+        
+        # Détection de langue simple
+        title_lower = job.get("title", "").lower()
+        lang = "es" if any(w in title_lower for w in ["ingeniero", "qa", "automatización"]) else "fr"
+        
+        # Génération lettre + html
+        letter_html = generate_cover_letter_html(job, lang, IMAGE_URL, CV_LINK_FR, CV_LINK_ES)
+        
+        # Envoi email
+        send_email_gmail(email, f"Candidature : {job.get('title')}", letter_html, CV_LINK_FR if lang=="fr" else CV_LINK_ES, IMAGE_URL)
+        
+        # Sauvegarde Google Sheets
         save_job(sheet, job, lang)
+    
+    print("🎯 Processus terminé.\n")
 
-    print("\n🎯 Processus terminé.")
-
-# ===========================
+# -----------------------------
 # Exécution immédiate
-# ===========================
-job_runner()
+# -----------------------------
+run_bot()
 
-# ===========================
+# -----------------------------
 # Scheduler toutes les heures
-# ===========================
-schedule.every().hour.do(job_runner)
+# -----------------------------
+schedule.every(1).hours.do(run_bot)
 print("🕒 Scheduler activé : exécution toutes les heures.")
 
 while True:
     schedule.run_pending()
-    time.sleep(60)
+    time.sleep(10)
