@@ -1,47 +1,45 @@
 import os
 import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+from email.message import EmailMessage
+from email.utils import formataddr
 from email.mime.base import MIMEBase
 from email import encoders
 import requests
 
-SMTP_EMAIL = os.getenv("SMTP_EMAIL")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
+SMTP_EMAIL = os.getenv("SMTP_EMAIL")  # ex: tonmail@gmail.com
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")  # mot de passe application Gmail
 
-CV_LINK_FR = os.getenv("CV_LINK_FR")
-CV_LINK_ES = os.getenv("CV_LINK_ES")
+def send_email_gmail(to_email, subject, html_content, cv_url, image_url):
+    msg = EmailMessage()
+    msg["From"] = formataddr(("Yacine Bedhouche", SMTP_EMAIL))
+    msg["To"] = to_email
+    msg["Subject"] = subject
+    msg.set_content("Veuillez afficher cet email en HTML pour voir le contenu complet.")
 
-def send_email_with_attachments(to_email, html_content, language="fr"):
-    if not to_email:
-        print("[Email] Aucun email trouvé, skip.")
-        return
+    # HTML
+    msg.add_alternative(html_content, subtype="html")
 
-    cv_link = CV_LINK_FR if language == "fr" else CV_LINK_ES
-
-    msg = MIMEMultipart()
-    msg['From'] = SMTP_EMAIL
-    msg['To'] = to_email
-    msg['Subject'] = "Candidature"
-
-    msg.attach(MIMEText(html_content, 'html'))
-
-    # Ajouter CV en pièce jointe
+    # Pièces jointes : CV
     try:
-        r = requests.get(cv_link)
-        part = MIMEBase('application', 'octet-stream')
-        part.set_payload(r.content)
-        encoders.encode_base64(part)
-        part.add_header('Content-Disposition', f'attachment; filename="CV.pdf"')
-        msg.attach(part)
+        cv_data = requests.get(cv_url).content
+        cv_name = cv_url.split("/")[-1].split("?")[0]
+        msg.add_attachment(cv_data, maintype="application", subtype="pdf", filename=cv_name)
     except Exception as e:
-        print(f"[Email] Erreur ajout CV : {e}")
+        print(f"[Email] Erreur CV : {e}")
 
-    # Envoi
+    # Image en pièce jointe
     try:
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+        img_data = requests.get(image_url).content
+        img_name = image_url.split("/")[-1].split("?")[0]
+        msg.add_attachment(img_data, maintype="image", subtype="jpeg", filename=img_name)
+    except Exception as e:
+        print(f"[Email] Erreur image : {e}")
+
+    # Envoi via SMTP Gmail
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(SMTP_EMAIL, SMTP_PASSWORD)
             server.send_message(msg)
-        print(f"[Email] Envoyé à {to_email}")
+        print(f"📩 Email envoyé à {to_email}")
     except Exception as e:
-        print(f"[Email] Erreur envoi : {e}")
+        print(f"[Email] Erreur : {e}")
