@@ -1,48 +1,39 @@
 import openai
 import os
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-openai.api_key = OPENAI_API_KEY
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 def generate_cover_letter_html(job, language, image_url, cv_fr, cv_es):
     prompt_fr = f"""
-Rédige une lettre de motivation professionnelle et captivante pour ce poste :
-Titre : {job.get('title')}
-Entreprise : {job.get('company')}
-Offre : {job.get('url')}
-Inclure un ton confiant et clair.
-"""
+    Rédige une lettre de motivation courte et professionnelle pour ce poste en français :
+    {job.get('title')} chez {job.get('company')}
+    """
     prompt_es = f"""
-Escribe una carta de motivación profesional y convincente para este puesto:
-Puesto : {job.get('title')}
-Empresa : {job.get('company')}
-Oferta : {job.get('url')}
-Incluye un tono confiado y claro.
-"""
+    Redacta una carta de motivación breve y profesional para este puesto en español:
+    {job.get('title')} en {job.get('company')}
+    """
 
-    prompt = prompt_fr if language == "fr" else prompt_es
+    prompt = prompt_fr if language=="fr" else prompt_es
 
-    try:
-        response = openai.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "Tu es un assistant RH expert."},
-                      {"role": "user", "content": prompt}],
-            max_tokens=500
-        )
-        letter_text = response.choices[0].message.content.strip()
-    except Exception as e:
-        print(f"[GPT] Erreur : {e}")
-        letter_text = "Veuillez afficher cette lettre en HTML."
+    response = openai.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role":"system","content":"Tu es un assistant RH expert."},
+            {"role":"user","content":prompt}
+        ],
+        max_tokens=300
+    )
 
+    letter = response.choices[0].message.content.strip()
     cv_link = cv_fr if language=="fr" else cv_es
 
     html = f"""
-<html>
-<body>
-<img src="{image_url}" style="width:100%;max-width:600px;margin-bottom:20px;">
-<p>{letter_text}</p>
-<p>Télécharger mon CV : <a href="{cv_link}">ici</a></p>
-</body>
-</html>
-"""
+    <html>
+        <body style="font-family: Arial, sans-serif; line-height: 1.5; color: #333;">
+            <img src="{image_url}" alt="AI Specialist" style="max-width:100%; height:auto; margin-bottom:20px;">
+            <p>{letter}</p>
+            <p>Mon CV est attaché en pièce jointe ou téléchargeable ici : <a href="{cv_link}">Télécharger CV</a></p>
+        </body>
+    </html>
+    """
     return html
