@@ -2,30 +2,43 @@ import requests
 from bs4 import BeautifulSoup
 
 def scrape_all_with_email():
-    """Scrape plusieurs sites d'offres en lien avec l'IA et retourne uniquement celles avec email."""
     jobs = []
 
-    # Exemple 1: WeWorkRemotely
+    # Exemple: WeWorkRemotely AI jobs
+    url = "https://weworkremotely.com/categories/remote-ai-jobs"
     try:
-        url = "https://weworkremotely.com/categories/remote-ai-jobs"
-        r = requests.get(url)
-        soup = BeautifulSoup(r.text, "html.parser")
-        for job_section in soup.select("section.jobs article"):
-            title_elem = job_section.select_one("span.title")
-            company_elem = job_section.select_one("span.company")
-            apply_link = job_section.select_one("a")
-            email = job_section.get("data-email")  # exemple, dépend du site
-            if title_elem and email:
+        resp = requests.get(url)
+        soup = BeautifulSoup(resp.text, "html.parser")
+        for li in soup.select("section.jobs > article > ul > li"):
+            a_tag = li.find("a", href=True)
+            if not a_tag:
+                continue
+            title = a_tag.text.strip()
+            job_url = "https://weworkremotely.com" + a_tag['href']
+            # Extraction email simple : placeholder
+            apply_email = extract_email_from_job(job_url)
+            if apply_email:
                 jobs.append({
-                    "title": title_elem.text.strip(),
-                    "company": company_elem.text.strip() if company_elem else "",
-                    "apply_email": email.strip(),
+                    "title": title,
+                    "company": "WeWorkRemotely",
                     "source": "WeWorkRemotely",
-                    "url": apply_link['href'] if apply_link else ""
+                    "url": job_url,
+                    "apply_email": apply_email
                 })
     except Exception as e:
         print(f"[WeWorkRemotely] Erreur lors du scraping : {e}")
 
-    # Ajouter d'autres sites similaires ici (RemoteOK, Indeed, etc.)
-
     return jobs
+
+def extract_email_from_job(job_url):
+    try:
+        resp = requests.get(job_url)
+        soup = BeautifulSoup(resp.text, "html.parser")
+        text = soup.get_text()
+        import re
+        m = re.search(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-z]{2,}", text)
+        if m:
+            return m.group(0)
+    except:
+        return None
+    return None
