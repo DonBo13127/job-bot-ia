@@ -6,7 +6,8 @@ import openai
 import requests
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from scraper import scrape_all  # ton scraper existant
+from scraper import scrape_all
+from datetime import datetime
 
 # ===========================
 # Variables d'environnement
@@ -16,82 +17,81 @@ SMTP_EMAIL = os.getenv("SMTP_EMAIL")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 CV_LINK_FR = os.getenv("CV_LINK_FR")
 CV_LINK_ES = os.getenv("CV_LINK_ES")
-CREDENTIALS_FILE = "absolute-bonsai-459420-q4-dddac3ebbb21.json"
-GOOGLE_SHEET_KEY = "1Rgd-OuFHA-nXaBPBaZyVlFv7cTsphHScPih4-jn9st8"
+SHEET_NAME = "Job Applications"  # Nom de ton Google Sheet
+CREDENTIALS_FILE = "absolute-bonsai-459420-q4-dddac3ebbb21.json"  # Ton JSON
 
-# API Key
 openai.api_key = OPENAI_API_KEY
 
 # ===========================
 # Connexion Google Sheets
 # ===========================
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+scope = ["https://spreadsheets.google.com/feeds",
+         "https://www.googleapis.com/auth/drive"]
+
 creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
 client = gspread.authorize(creds)
-sheet = client.open_by_key(GOOGLE_SHEET_KEY).sheet1
+sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1Rgd-OuFHA-nXaBPBaZyVlFv7cTsphHScPih4-jn9st8/edit").sheet1
 
 # ===========================
-# Fonctions
+# Détection de langue
 # ===========================
 def detect_language(job):
     title = job.get("title", "").lower()
-    if any(word in title for word in ["ingeniero", "pruebas", "automatización", "tecnología"]):
+    if any(word in title for word in ["ingeniero", "qa", "pruebas", "automatización", "tecnología"]):
         return "es"
     return "fr"
 
+# ===========================
+# Génération lettre de motivation
+# ===========================
 def generate_cover_letter(job, language="fr"):
-    image_url = "https://img.freepik.com/photos-gratuite/specialiste-informatique-dans-ferme-serveurs-minimisant-defaillances-machines_264385749.jpg"
-    if language == "fr":
-        prompt = f"""
-        Tu es un spécialiste en IA et RH. Rédige une lettre de motivation concise, professionnelle & percutante :
-        Titre : {job.get('title')}
-        Entreprise : {job.get('company')}
-        Offre : {job.get('url')}
-        Inclure une image visuelle : {image_url}
-        Mets en avant expérience ISTQB, automatisation, IA, optimisation et qualité logicielle.
-        """
-    else:
-        prompt = f"""
-        Eres especialista en IA y RH. Escribe una carta de motivación breve, profesional y convincente:
-        Puesto: {job.get('title')}
-        Empresa: {job.get('company')}
-        Oferta: {job.get('url')}
-        Incluye imagen visual : {image_url}
-        Destaca experiencia ISTQB, automatización, IA, optimización y calidad de software.
-        """
+    prompt_fr = f"""
+Rédige une lettre de motivation courte et professionnelle pour postuler à ce poste :
+Titre : {job.get('title')}
+Entreprise : {job.get('company')}
+Offre : {job.get('url')}
+Inclue une image illustrant un spécialiste informatique : https://fr.freepik.com/photos-gratuite/specialiste-informatique-dans-ferme-serveurs-minimisant-defaillances-machines_264385749.htm#fromView=search&page=1&position=5&uuid=f6600eb9-89a4-4b30-94a2-d917bd260646&query=IT
+"""
+
+    prompt_es = f"""
+Escribe una carta de motivación breve y profesional para postular a este puesto:
+Puesto: {job.get('title')}
+Empresa: {job.get('company')}
+Oferta: {job.get('url')}
+Incluye una imagen que ilustre a un especialista en informática: https://fr.freepik.com/photos-gratuite/specialiste-informatique-dans-ferme-serveurs-minimisant-defaillances-machines_264385749.htm#fromView=search&page=1&position=5&uuid=f6600eb9-89a4-4b30-94a2-d917bd260646&query=IT
+"""
+
+    prompt = prompt_fr if language == "fr" else prompt_es
+
     try:
         response = openai.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "Tu es un assistant RH expert et spécialiste IA."},
+                {"role": "system", "content": "Tu es un assistant RH expert."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=400
+            max_tokens=300
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
         print(f"[GPT] Erreur : {e}")
         return ""
 
+# ===========================
+# Envoi email via Gmail
+# ===========================
 def send_email(job, letter, language="fr"):
     msg = EmailMessage()
     msg["Subject"] = f"Candidature : {job.get('title')}"
     msg["From"] = SMTP_EMAIL
-    msg["To"] = job.get("apply_email", SMTP_EMAIL)  # fallback
+    msg["To"] = job.get("apply_email", SMTP_EMAIL)
 
-    # version texte
     msg.set_content(letter)
-    # version HTML avec image et lien CV
     cv_url = CV_LINK_FR if language == "fr" else CV_LINK_ES
     msg.add_alternative(f"""
-    <html>
-      <body>
-        <p>{letter}</p>
-        <p>Mon CV : <a href="{cv_url}">Télécharger CV</a></p>
-        <p><img src="https://img.freepik.com/photos-gratuite/specialiste-informatique-dans-ferme-serveurs-minimisant-defaillances-machines_264385749.jpg" alt="Image IA" width="400"></p>
-      </body>
-    </html>
-    """, subtype="html")
+<p>{letter}</p>
+<p>Mon CV est disponible ici : <a href="{cv_url}">Télécharger CV</a></p>
+""", subtype="html")
 
     try:
         with smtplib.SMTP("smtp.gmail.com", 587) as server:
@@ -102,44 +102,53 @@ def send_email(job, letter, language="fr"):
     except Exception as e:
         print(f"[Email] Erreur : {e}")
 
-def exists_in_sheet(job):
-    try:
-        records = sheet.get_all_records()
-        # suppose que tu as une colonne "URL" dans ton sheet
-        return any(r.get("URL", "") == job.get("url") for r in records)
-    except Exception as e:
-        print(f"[Sheets] Erreur lecture : {e}")
-        return False
-
+# ===========================
+# Sauvegarde dans Google Sheets
+# ===========================
 def save_to_sheet(job, language):
-    if exists_in_sheet(job):
-        print(f"⚠ Offre déjà enregistrée : {job.get('title')}")
-        return
-    sheet.append_row([
-        job.get("title", ""),
-        job.get("company", ""),
-        job.get("source", ""),
-        job.get("url", ""),
-        language.upper(),
-        datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    ])
-    print(f"🗂 Offre sauvegardée : {job.get('title')}")
+    try:
+        # Vérifie doublon
+        records = sheet.get_all_records()
+        urls = [r.get("URL", "") for r in records]
+        if job.get("url") in urls:
+            print(f"⚠ Offre déjà sauvegardée : {job.get('title')}")
+            return
+        # Ajout
+        sheet.append_row([
+            job.get("title", ""),
+            job.get("company", ""),
+            job.get("source", ""),
+            job.get("url", ""),
+            language.upper(),
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        ])
+        print(f"🗂 Offre sauvegardée : {job.get('title')}")
+    except Exception as e:
+        print(f"[Sheets] Erreur : {e}")
 
+# ===========================
+# Main
+# ===========================
 def main():
-    from datetime import datetime
     print("🚀 Démarrage du bot de candidature automatique...\n")
     jobs = scrape_all()
     if not jobs:
         print("📭 Aucune offre trouvée.")
         return
+
     print(f"✅ {len(jobs)} offres collectées.\n")
-    for i, job in enumerate(jobs[:5], 1):
+
+    for i, job in enumerate(jobs[:5], 1):  # limite à 5 pour éviter le spam
         print(f"\n--- Offre {i}/{len(jobs)} ---")
         print(f"💼 {job.get('title')} chez {job.get('company')} ({job.get('source')})")
+
         lang = detect_language(job)
         letter = generate_cover_letter(job, lang)
+        print(f"📝 Lettre générée ({lang.upper()}) :\n{letter[:200]}...\n")
+
         send_email(job, letter, lang)
         save_to_sheet(job, lang)
+
     print("\n🎯 Processus terminé.")
 
 if __name__ == "__main__":
