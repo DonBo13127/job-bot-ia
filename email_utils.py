@@ -5,7 +5,7 @@ from email.mime.application import MIMEApplication
 import os
 
 SMTP_USER = "ton_email@gmail.com"
-SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD")  # Ton secret Replit
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD")  # Secret Replit
 
 def send_email_gmail(to_email, subject, html_content, attachments=[]):
     msg = MIMEMultipart()
