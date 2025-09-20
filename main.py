@@ -1,6 +1,6 @@
 import time
 import schedule
-from scraper import scrape_all_with_email
+from scraper import scrape_ai_jobs
 from gpt_utils import generate_cover_letter_html
 from sheets_utils import connect_sheets, save_job
 from email_utils import send_email_gmail
@@ -8,13 +8,13 @@ from langdetect import detect
 
 SHEET_JSON = "absolute-bonsai-459420-q4-dddac3ebbb21.json"
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1Rgd-OuFHA-nXaBPBaZyVlFv7cTsphHScPih4-jn9st8/edit"
-IMAGE_URL = "https://cdn.pixabay.com/photo/2017/08/10/07/28/computer-2616432_1280.jpg"  # Exemple image
+IMAGE_URL = "https://cdn.pixabay.com/photo/2017/08/10/07/28/computer-2616432_1280.jpg"
 CV_PATH = "CV.pdf"
 
 def process_jobs():
     print("🚀 Démarrage du bot de candidature automatique...")
     sheet = connect_sheets(SHEET_JSON, SHEET_URL)
-    jobs = scrape_all_with_email()
+    jobs = scrape_ai_jobs()
     print(f"✅ {len(jobs)} offres IA collectées.\n")
 
     for idx, job in enumerate(jobs, 1):
