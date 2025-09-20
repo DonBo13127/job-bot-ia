@@ -1,30 +1,26 @@
 import smtplib
-from email.message import EmailMessage
-from email.utils import make_msgid
-import requests
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.application import MIMEApplication
+import os
 
-def send_email_gmail(to_email, subject, html_content, gmail_email, gmail_app_password, cv_file_link):
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = gmail_email
-    msg["To"] = to_email
+SMTP_USER = "ton_email@gmail.com"
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD")  # Ton secret Replit
 
-    msg.add_alternative(html_content, subtype="html")
+def send_email_gmail(to_email, subject, html_content, attachments=[]):
+    msg = MIMEMultipart()
+    msg['From'] = SMTP_USER
+    msg['To'] = to_email
+    msg['Subject'] = subject
 
-    # Ajouter le CV en pièce jointe
-    try:
-        r = requests.get(cv_file_link)
-        if r.status_code == 200:
-            msg.add_attachment(r.content, maintype="application", subtype="pdf", filename="CV.pdf")
-    except Exception as e:
-        print(f"[Email] Erreur en attachant le CV : {e}")
+    msg.attach(MIMEText(html_content, 'html'))
 
-    # Envoi via Gmail
-    try:
-        with smtplib.SMTP("smtp.gmail.com", 587) as server:
-            server.starttls()
-            server.login(gmail_email, gmail_app_password)
-            server.send_message(msg)
-        print(f"📩 Email envoyé à {to_email}")
-    except Exception as e:
-        print(f"[Email] Erreur : {e}")
+    for file_path in attachments:
+        with open(file_path, 'rb') as f:
+            part = MIMEApplication(f.read(), Name=os.path.basename(file_path))
+            part['Content-Disposition'] = f'attachment; filename="{os.path.basename(file_path)}"'
+            msg.attach(part)
+
+    with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+        server.login(SMTP_USER, SMTP_PASSWORD)
+        server.send_message(msg)
