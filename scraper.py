@@ -1,112 +1,68 @@
 import requests
-import feedparser
 
-# =============================
-#  Welcome to the Jungle (WTTJ)
-# =============================
-def scrape_wttj(query="python"):
-    url = f"https://www.welcometothejungle.com/api/v1/jobs?query={query}&language=fr&limit=10&page=1"
+def scrape_wttj():
+    url = "https://www.welcometothejungle.com/fr/jobs?ref=api"
     try:
-        resp = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
-        resp.raise_for_status()
-        jobs = resp.json().get("jobs", [])
+        r = requests.get(url)
+        jobs = r.json().get("jobs", [])
         results = []
         for job in jobs:
             results.append({
-                "source": "Welcome to the Jungle",
-                "title": job["name"],
-                "company": job["company"]["name"],
-                "url": f"https://www.welcometothejungle.com/fr/companies/{job['company']['slug']}/jobs/{job['slug']}"
+                "title": job.get("title"),
+                "company": job.get("company_name"),
+                "url": job.get("seo_url"),
+                "source": "WTTJ",
+                "apply_email": job.get("apply_email")  # si dispo
             })
         return results
-    except Exception as e:
-        print(f"[WTTJ] Erreur : {e}")
+    except:
+        print("[WTTJ] Erreur lors du scraping")
         return []
 
-
-# =============================
-#  Remotive (API officielle)
-# =============================
-def scrape_remotive(category="software-dev"):
-    url = f"https://remotive.io/api/remote-jobs?category={category}"
+def scrape_remotive():
+    url = "https://remotive.io/api/remote-jobs?category=software-dev"
     try:
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-        jobs = resp.json().get("jobs", [])
+        r = requests.get(url)
+        jobs = r.json().get("jobs", [])
         results = []
         for job in jobs:
             results.append({
+                "title": job.get("title"),
+                "company": job.get("company_name"),
+                "url": job.get("url"),
                 "source": "Remotive",
-                "title": job["title"],
-                "company": job["company_name"],
-                "url": job["url"],
-                "location": job["candidate_required_location"]
+                "apply_email": job.get("apply_email")
             })
         return results
-    except Exception as e:
-        print(f"[Remotive] Erreur : {e}")
+    except:
+        print("[Remotive] Erreur lors du scraping")
         return []
 
-
-# =============================
-#  WeWorkRemotely (RSS feed)
-# =============================
 def scrape_weworkremotely():
     url = "https://weworkremotely.com/categories/remote-programming-jobs.rss"
     try:
-        feed = feedparser.parse(url)
+        r = requests.get(url)
+        # parsing RSS simple (titre + lien)
         results = []
-        for entry in feed.entries:
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(r.content)
+        for item in root.findall(".//item"):
             results.append({
+                "title": item.find("title").text,
+                "company": item.find("author").text if item.find("author") is not None else "",
+                "url": item.find("link").text,
                 "source": "WeWorkRemotely",
-                "title": entry.title,
-                "company": entry.title.split(":")[0],
-                "url": entry.link
+                "apply_email": None
             })
         return results
-    except Exception as e:
-        print(f"[WeWorkRemotely] Erreur : {e}")
+    except:
+        print("[WeWorkRemotely] Erreur lors du scraping")
         return []
 
-
-# =============================
-#  RemoteOK (API officielle)
-# =============================
-def scrape_remoteok():
-    url = "https://remoteok.com/api"
-    try:
-        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-        resp.raise_for_status()
-        jobs = resp.json()[1:]  # le premier élément est une bannière
-        results = []
-        for job in jobs:
-            results.append({
-                "source": "RemoteOK",
-                "title": job.get("position"),
-                "company": job.get("company"),
-                "url": job.get("url")
-            })
-        return results
-    except Exception as e:
-        print(f"[RemoteOK] Erreur : {e}")
-        return []
-
-
-# =============================
-#  Fonction principale
-# =============================
 def scrape_all():
-    all_jobs = []
-    all_jobs.extend(scrape_wttj("python"))
-    all_jobs.extend(scrape_remotive("software-dev"))
-    all_jobs.extend(scrape_weworkremotely())
-    all_jobs.extend(scrape_remoteok())
-    return all_jobs
-
-
-if __name__ == "__main__":
-    print("🔍 Collecte des offres d'emploi...")
-    jobs = scrape_all()
-    print(f"[Total] 🎯 {len(jobs)} offre(s) collectée(s).")
-    for job in jobs[:10]:  # affiche seulement les 10 premières
-        print(f"- {job['source']} | {job['title']} @ {job.get('company', 'N/A')} -> {job['url']}")
+    jobs = []
+    jobs += scrape_wttj()
+    jobs += scrape_remotive()
+    jobs += scrape_weworkremotely()
+    print(f"✅ {len(jobs)} offres collectées.")
+    return jobs
