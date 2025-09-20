@@ -4,42 +4,45 @@ import os
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 openai.api_key = OPENAI_API_KEY
 
-IMAGE_URL = "https://img.freepik.com/photos-gratuite/specialiste-informatique-dans-ferme-serveurs-minimisant-defaillances-machines_264385749.htm"
-
-CV_LINK_FR = os.getenv("CV_LINK_FR")
-CV_LINK_ES = os.getenv("CV_LINK_ES")
-
-def generate_cover_letter_html(job, language="fr"):
-    prompt = f"""
-Rédige une lettre de motivation professionnelle et convaincante pour postuler au poste suivant :
+def generate_cover_letter_html(job, language, image_url, cv_fr, cv_es):
+    prompt_fr = f"""
+Rédige une lettre de motivation professionnelle et captivante pour ce poste :
 Titre : {job.get('title')}
 Entreprise : {job.get('company')}
-URL de l'offre : {job.get('url')}
-Langue : {language}
+Offre : {job.get('url')}
+Inclure un ton confiant et clair.
 """
+    prompt_es = f"""
+Escribe una carta de motivación profesional y convincente para este puesto:
+Puesto : {job.get('title')}
+Empresa : {job.get('company')}
+Oferta : {job.get('url')}
+Incluye un tono confiado y claro.
+"""
+
+    prompt = prompt_fr if language == "fr" else prompt_es
+
     try:
         response = openai.chat.completions.create(
             model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "Tu es un expert RH et copywriter."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=400
+            messages=[{"role": "system", "content": "Tu es un assistant RH expert."},
+                      {"role": "user", "content": prompt}],
+            max_tokens=500
         )
-        letter = response.choices[0].message.content.strip()
+        letter_text = response.choices[0].message.content.strip()
     except Exception as e:
         print(f"[GPT] Erreur : {e}")
-        letter = "Bonjour, je souhaite postuler pour ce poste."
+        letter_text = "Veuillez afficher cette lettre en HTML."
 
-    cv_link = CV_LINK_FR if language == "fr" else CV_LINK_ES
+    cv_link = cv_fr if language=="fr" else cv_es
 
-    html_content = f"""
+    html = f"""
 <html>
 <body>
-    <p>{letter}</p>
-    <p>Mon CV : <a href="{cv_link}">Télécharger</a></p>
-    <img src="{IMAGE_URL}" alt="Image IA" width="400"/>
+<img src="{image_url}" style="width:100%;max-width:600px;margin-bottom:20px;">
+<p>{letter_text}</p>
+<p>Télécharger mon CV : <a href="{cv_link}">ici</a></p>
 </body>
 </html>
 """
-    return html_content
+    return html
