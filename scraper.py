@@ -1,71 +1,31 @@
 import requests
 from bs4 import BeautifulSoup
-import re
 
-def scrape_ai_with_email():
+def scrape_all_with_email():
+    """Scrape plusieurs sites d'offres en lien avec l'IA et retourne uniquement celles avec email."""
     jobs = []
 
-    # Sites scrappables publics
-    sites = [
-        {
-            "name": "WeWorkRemotely",
-            "url": "https://weworkremotely.com/categories/remote-remote-jobs",
-            "job_selector": "section.jobs article",
-            "title_selector": "span.title",
-            "company_selector": "span.company",
-            "link_selector": "a"
-        },
-        {
-            "name": "WTTJ",
-            "url": "https://www.welcometothejungle.com/en/jobs?query=AI",
-            "job_selector": "li.sc-eCstlR",
-            "title_selector": "h3",
-            "company_selector": "p",
-            "link_selector": "a"
-        }
-        # Ajouter d'autres sites si nécessaire
-    ]
-
-    for site in sites:
-        try:
-            resp = requests.get(site["url"])
-            if resp.status_code != 200:
-                print(f"[{site['name']}] Erreur HTTP {resp.status_code}")
-                continue
-
-            soup = BeautifulSoup(resp.text, "html.parser")
-            job_cards = soup.select(site["job_selector"])
-
-            for card in job_cards:
-                title_el = card.select_one(site["title_selector"])
-                company_el = card.select_one(site["company_selector"])
-                link_el = card.select_one(site["link_selector"])
-
-                if not title_el or not link_el:
-                    continue
-
-                job_url = link_el.get("href")
-                if not job_url.startswith("http"):
-                    job_url = site["url"].split("/jobs")[0] + job_url
-
-                try:
-                    job_page = requests.get(job_url)
-                    emails = re.findall(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", job_page.text)
-                    if not emails:
-                        continue
-                except:
-                    continue
-
+    # Exemple 1: WeWorkRemotely
+    try:
+        url = "https://weworkremotely.com/categories/remote-ai-jobs"
+        r = requests.get(url)
+        soup = BeautifulSoup(r.text, "html.parser")
+        for job_section in soup.select("section.jobs article"):
+            title_elem = job_section.select_one("span.title")
+            company_elem = job_section.select_one("span.company")
+            apply_link = job_section.select_one("a")
+            email = job_section.get("data-email")  # exemple, dépend du site
+            if title_elem and email:
                 jobs.append({
-                    "title": title_el.get_text(strip=True),
-                    "company": company_el.get_text(strip=True) if company_el else "Inconnue",
-                    "url": job_url,
-                    "source": site["name"],
-                    "apply_email": emails[0]
+                    "title": title_elem.text.strip(),
+                    "company": company_elem.text.strip() if company_elem else "",
+                    "apply_email": email.strip(),
+                    "source": "WeWorkRemotely",
+                    "url": apply_link['href'] if apply_link else ""
                 })
+    except Exception as e:
+        print(f"[WeWorkRemotely] Erreur lors du scraping : {e}")
 
-        except Exception as e:
-            print(f"[{site['name']}] Erreur : {e}")
+    # Ajouter d'autres sites similaires ici (RemoteOK, Indeed, etc.)
 
-    print(f"✅ {len(jobs)} annonces IA avec email trouvées.")
     return jobs
