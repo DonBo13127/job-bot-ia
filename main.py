@@ -1,61 +1,59 @@
 import os
-import schedule
 import time
-from scraper import scrape_all_ai_with_email
-from gpt_utils import generate_cover_letter_html
-from email_utils import send_email_gmail
+from scraper import scrape_all_with_email  # Scraper IA uniquement
 from sheets_utils import connect_sheets, save_job
+from gpt_utils import generate_cover_letter_html
+from email_utils import send_email_gmail  # utilise Gmail avec mot de passe d'application
 
+# ===========================
 # Variables d'environnement
-GMAIL_EMAIL = os.getenv("GMAIL_EMAIL")
-GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
-CV_LINK_FR = os.getenv("CV_LINK_FR")
-CV_LINK_ES = os.getenv("CV_LINK_ES")
-IMAGE_URL = "https://img.freepik.com/photos-gratuite/specialiste-informatique-dans-ferme-serveurs-minimisant-defaillances-machines_264385749.htm"
+# ===========================
+GMAIL_EMAIL = os.getenv("GMAIL_EMAIL")  # ton email Gmail
+GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")  # mot de passe d'application Gmail
+SHEET_JSON = os.getenv("SHEET_JSON")  # ton fichier JSON du service account
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1Rgd-OuFHA-nXaBPBaZyVlFv7cTsphHScPih4-jn9st8/edit"  # ton sheet
 
-# Google Sheet
-SHEET_JSON = "absolute-bonsai-459420-q4-dddac3ebbb21.json"
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1Rgd-OuFHA-nXaBPBaZyVlFv7cTsphHScPih4-jn9st8/edit#gid=0"
+# Connexion à Google Sheets
 sheet = connect_sheets(SHEET_JSON, SHEET_URL)
 
-def run_bot():
+def main():
     print("🚀 Démarrage du bot de candidature automatique...")
 
-    jobs = scrape_all_ai_with_email()
+    jobs = scrape_all_with_email()
     if not jobs:
-        print("📭 Aucune offre IA avec email trouvée.")
+        print("📭 Aucune offre trouvée.")
         return
 
     print(f"✅ {len(jobs)} offres IA collectées.\n")
 
     for i, job in enumerate(jobs, 1):
-        print(f"\n--- Offre {i}/{len(jobs)} ---")
+        print(f"--- Offre {i}/{len(jobs)} ---")
         print(f"💼 {job.get('title')} chez {job.get('company')} ({job.get('source')})")
+
+        # Génération de la lettre HTML
         lang = job.get("lang", "fr")
-        email = job.get("apply_email")
-        if not email:
-            print("[Email] Ignorée car aucun email fourni.")
-            continue
+        letter_html = generate_cover_letter_html(job, lang)
 
-        # Génération lettre HTML
-        letter_html = generate_cover_letter_html(job, lang, IMAGE_URL, CV_LINK_FR, CV_LINK_ES)
+        # Envoi de l'email via Gmail
+        send_email_gmail(
+            to_email=job.get("email"),
+            subject=f"Candidature : {job.get('title')}",
+            html_content=letter_html,
+            attachments=[job.get("cv_fr"), job.get("cv_es")],  # chemins vers tes CV locaux
+            from_email=GMAIL_EMAIL,
+            app_password=GMAIL_APP_PASSWORD
+        )
 
-        # Envoi email
-        send_email_gmail(email, f"Candidature : {job.get('title')}", letter_html,
-                         GMAIL_EMAIL, GMAIL_APP_PASSWORD, CV_LINK_FR if lang=="fr" else CV_LINK_ES)
-
-        # Sauvegarde Google Sheets
+        # Sauvegarde dans Google Sheets
         save_job(sheet, job)
 
-    print("\n🎯 Processus terminé.")
+        print(f"🗂 Offre enregistrée : {job.get('title')}\n")
 
-# Exécution immédiate
-run_bot()
+    print("🎯 Processus terminé.")
 
-# Planification toutes les heures
-schedule.every(1).hours.do(run_bot)
-print("🕒 Scheduler activé : exécution toutes les heures.")
-
-while True:
-    schedule.run_pending()
-    time.sleep(60)
+if __name__ == "__main__":
+    main()
+    print("🕒 Scheduler activé : exécution toutes les heures.")
+    while True:
+        time.sleep(3600)
+        main()
