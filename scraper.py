@@ -1,34 +1,49 @@
 import requests
-from bs4 import BeautifulSoup
 
-def scrape_all():
+def scrape_all_ai():
+    """
+    Scrape des offres liées à l'IA depuis plusieurs sources.
+    Retourne une liste de dicts avec : title, company, url, apply_email, source
+    """
     jobs = []
 
-    # Exemple simple WeWorkRemotely
-    url = "https://weworkremotely.com/remote-jobs/search?term=AI"
+    # Exemple WeWorkRemotely
     try:
-        res = requests.get(url)
-        soup = BeautifulSoup(res.text, "html.parser")
-        offers = soup.select("section.jobs article")
-        for offer in offers:
-            title_tag = offer.select_one("span.title")
-            company_tag = offer.select_one("span.company")
-            link_tag = offer.select_one("a")
-            if title_tag and company_tag and link_tag:
-                title = title_tag.text.strip()
-                company = company_tag.text.strip()
-                link = "https://weworkremotely.com" + link_tag["href"]
-                # Filtrage IA
-                keywords = ["AI", "Machine Learning", "Deep Learning", "Artificial Intelligence"]
-                if any(k.lower() in title.lower() for k in keywords):
-                    jobs.append({
-                        "title": title,
-                        "company": company,
-                        "url": link,
-                        "source": "WeWorkRemotely",
-                        "apply_email": None  # pas d'email direct
-                    })
+        resp = requests.get("https://weworkremotely.com/categories/remote-ai-jobs")
+        if resp.status_code == 200:
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(resp.text, "html.parser")
+            listings = soup.select("section.jobs article li a")
+            for link in listings:
+                title = link.find("span", class_="title").text if link.find("span", class_="title") else "Sans titre"
+                company = link.find("span", class_="company").text if link.find("span", class_="company") else "Inconnue"
+                url = "https://weworkremotely.com" + link.get("href")
+                jobs.append({
+                    "title": title,
+                    "company": company,
+                    "url": url,
+                    "apply_email": None,  # On pourra extraire plus tard si disponible
+                    "source": "WeWorkRemotely"
+                })
     except Exception as e:
-        print(f"[WeWorkRemotely] Erreur lors du scraping: {e}")
+        print(f"[WeWorkRemotely] Erreur lors du scraping : {e}")
+
+    # Exemple Remotive.io
+    try:
+        resp = requests.get("https://remotive.io/api/remote-jobs?search=AI")
+        if resp.status_code == 200:
+            data = resp.json()
+            for job in data.get("jobs", []):
+                jobs.append({
+                    "title": job.get("title"),
+                    "company": job.get("company_name"),
+                    "url": job.get("url"),
+                    "apply_email": None,  # à compléter si disponible
+                    "source": "Remotive"
+                })
+    except Exception as e:
+        print(f"[Remotive] Erreur lors du scraping : {e}")
+
+    # On peut ajouter d'autres sources ici
 
     return jobs
