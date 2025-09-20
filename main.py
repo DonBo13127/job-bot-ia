@@ -19,7 +19,7 @@ SMTP_EMAIL = os.getenv("SMTP_EMAIL")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 CV_LINK_FR = os.getenv("CV_LINK_FR")
 CV_LINK_ES = os.getenv("CV_LINK_ES")
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1Rgd-OuFHA-nXaBPBaZyVlFv7cTsphHScPih4-jn9st8/edit"
+SHEET_URL = os.getenv("SHEET_URL")  # lien complet Google Sheets
 IMAGE_URL = "https://image.freepik.com/photos-gratuite/specialiste-informatique-dans-ferme-serveurs-minimisant-defaillances-machines_264385749.jpg"
 CREDENTIALS_FILE = "absolute-bonsai-459420-q4-dddac3ebbb21.json"
 
