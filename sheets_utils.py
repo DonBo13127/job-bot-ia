@@ -6,9 +6,8 @@ def connect_sheets(json_keyfile, sheet_url_or_id):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_name(json_keyfile, scope)
     client = gspread.authorize(creds)
-    
+
     try:
-        # Ouvrir directement via ID ou URL
         sheet = client.open_by_url(sheet_url_or_id).sheet1
         return sheet
     except Exception:
@@ -16,9 +15,7 @@ def connect_sheets(json_keyfile, sheet_url_or_id):
             sheet = client.open_by_key(sheet_url_or_id).sheet1
             return sheet
         except Exception:
-            raise Exception(
-                f"⚠️ Google Sheet '{sheet_url_or_id}' introuvable. Vérifie que le service account a accès."
-            )
+            raise Exception(f"⚠️ Google Sheet '{sheet_url_or_id}' introuvable. Vérifie que le service account a accès.")
 
 def save_job(sheet, job, lang):
     try:
