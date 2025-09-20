@@ -8,7 +8,7 @@ IMAGE_URL = "https://image.freepik.com/photos-gratuite/specialiste-informatique-
 
 def generate_cover_letter_html(job, language="fr"):
     prompt = f"""
-    Rédige une lettre de motivation courte et professionnelle pour postuler à ce poste :
+    Rédige une lettre de motivation courte et professionnelle en mettant en avant les skills essentiels au job sélectionné pour postuler à ce poste :
     Titre : {job['title']}
     Entreprise : {job['company']}
     Offre : {job['url']}
