@@ -5,7 +5,7 @@ from email.message import EmailMessage
 from datetime import datetime
 import schedule
 
-from scraper import scrape_all_ai
+from scraper import scrape_ai_with_email
 from gpt_utils import generate_cover_letter_html
 from sheets_utils import connect_sheets_by_id, save_job_to_sheet
 
@@ -32,16 +32,17 @@ sheet = connect_sheets_by_id(SHEET_JSON, SHEET_ID)
 # Fonction d'envoi email
 # ===========================
 def send_email(job, html_content, cv_link, language="fr"):
-    msg = EmailMessage()
-    msg["Subject"] = f"Candidature : {job.get('title')}"
-    msg["From"] = SMTP_EMAIL
-    msg["To"] = job.get("apply_email")  # doit être récupéré par le scraper
-    if not msg["To"]:
+    recipient = job.get("apply_email")
+    if not recipient:
         print(f"[Email] Pas d'adresse pour {job.get('title')}")
         return
 
-    msg.set_content("Votre client email ne supporte pas le HTML.")
+    msg = EmailMessage()
+    msg["Subject"] = f"Candidature : {job.get('title')}"
+    msg["From"] = SMTP_EMAIL
+    msg["To"] = recipient
 
+    msg.set_content("Votre client email ne supporte pas le HTML.")
     msg.add_alternative(html_content, subtype="html")
 
     # Ajouter les CV en pièce jointe
@@ -59,7 +60,7 @@ def send_email(job, html_content, cv_link, language="fr"):
             server.starttls()
             server.login(SMTP_EMAIL, SMTP_PASSWORD)
             server.send_message(msg)
-        print(f"[Email] Envoyé : {job.get('title')}")
+        print(f"[Email] Envoyé : {job.get('title')} à {recipient}")
     except Exception as e:
         print(f"[Email] Erreur : {e}")
 
@@ -68,14 +69,14 @@ def send_email(job, html_content, cv_link, language="fr"):
 # ===========================
 def job_bot():
     print(f"\n🚀 Démarrage du bot : {datetime.now()}")
-    jobs = scrape_all_ai()
-    print(f"✅ {len(jobs)} offres collectées.")
+    jobs = scrape_ai_with_email()
+    print(f"✅ {len(jobs)} annonces IA avec email trouvées.")
 
     for job in jobs:
         title = job.get("title")
         print(f"\n💼 {title}")
 
-        # Détection langue (simple)
+        # Détection langue (fr/es)
         language = "es" if any(w in title.lower() for w in ["ingeniero", "automatización"]) else "fr"
 
         # Génération lettre HTML
