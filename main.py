@@ -1,47 +1,95 @@
 import os
 import smtplib
 from email.message import EmailMessage
-from scraper import scrape_all  # ton scraper existant
-import openai
+from datetime import datetime
 import requests
+import openai
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+from langdetect import detect
 
 # ===========================
 # Variables d'environnement
 # ===========================
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-NOTION_API_KEY = os.getenv("NOTION_API_KEY")
-NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID")
-SMTP_EMAIL = os.getenv("SMTP_EMAIL")  # ton Gmail
+SMTP_EMAIL = os.getenv("SMTP_EMAIL")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")  # mot de passe d'application Gmail
 CV_LINK_FR = os.getenv("CV_LINK_FR")
 CV_LINK_ES = os.getenv("CV_LINK_ES")
+GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")  # ID du sheet
+CREDENTIALS_FILE = "replit_credentials.json"  # fichier JSON du service account
 
 openai.api_key = OPENAI_API_KEY
 
 # ===========================
-# Génération de la lettre de motivation
+# Connexion Google Sheets
+# ===========================
+scope = ["https://spreadsheets.google.com/feeds","https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
+client = gspread.authorize(creds)
+sheet = client.open_by_key(GOOGLE_SHEET_ID).sheet1
+
+def already_applied(job_url):
+    urls = sheet.col_values(4)
+    return job_url in urls
+
+def save_to_sheet(job, language):
+    if already_applied(job.get("url")):
+        print(f"⚠ Offre déjà postée : {job.get('title')} chez {job.get('company')}")
+        return
+    row = [
+        job.get("title", ""),
+        job.get("company", ""),
+        job.get("source", ""),
+        job.get("url", ""),
+        language.upper(),
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ]
+    sheet.append_row(row)
+    print(f"✅ Offre enregistrée dans Google Sheets ({job.get('title')})")
+
+# ===========================
+# Détection langue
+# ===========================
+def detect_language(job):
+    try:
+        lang = detect(job.get("title", ""))
+        if lang.startswith("es"):
+            return "es"
+        return "fr"
+    except:
+        return "fr"
+
+# ===========================
+# Génération lettre motivation
 # ===========================
 def generate_cover_letter(job, language="fr"):
+    image_url = "https://image.freepik.com/photos-gratuite/specialiste-informatique-dans-ferme-serveurs-minimisant-defaillances-machines_264385749.htm"
+
     prompt_fr = f"""
-    Rédige une lettre de motivation courte et professionnelle pour postuler à ce poste :
+    Tu es un spécialiste en QA et IA. Rédige une lettre de motivation courte et très professionnelle pour postuler à ce poste :
     Titre : {job.get('title')}
     Entreprise : {job.get('company')}
     Offre : {job.get('url')}
+    Ajoute cette image au corps du mail : {image_url}
     """
     prompt_es = f"""
-    Escribe una carta de motivación breve y profesional para postular a este puesto:
+    Eres un especialista en QA e IA. Escribe una carta de motivación breve y muy profesional para postular a este puesto:
     Puesto: {job.get('title')}
     Empresa: {job.get('company')}
     Oferta: {job.get('url')}
+    Incluye esta imagen en el correo: {image_url}
     """
     prompt = prompt_fr if language == "fr" else prompt_es
 
     try:
         response = openai.chat.completions.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "Tu es un assistant RH expert."},
-                      {"role": "user", "content": prompt}],
-            max_tokens=300
+            messages=[
+                {"role": "system", "content": "Tu es un assistant RH expert."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=400
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
@@ -49,22 +97,24 @@ def generate_cover_letter(job, language="fr"):
         return ""
 
 # ===========================
-# Envoi d'email via Gmail
+# Envoi email via Gmail
 # ===========================
 def send_email(job, letter, language="fr"):
     msg = EmailMessage()
     msg["Subject"] = f"Candidature : {job.get('title')}"
     msg["From"] = SMTP_EMAIL
-    msg["To"] = job.get("apply_email", SMTP_EMAIL)  # fallback si pas d'adresse
+    msg["To"] = job.get("apply_email", SMTP_EMAIL)
 
-    # Corps du mail
-    msg.set_content(letter)
-
-    # Version HTML avec lien CV
     cv_url = CV_LINK_FR if language == "fr" else CV_LINK_ES
+
     msg.add_alternative(f"""
-    <p>{letter}</p>
-    <p>Mon CV est disponible ici : <a href="{cv_url}">Télécharger CV</a></p>
+    <html>
+    <body>
+        <p>{letter}</p>
+        <p><img src="https://image.freepik.com/photos-gratuite/specialiste-informatique-dans-ferme-serveurs-minimisant-defaillances-machines_264385749.htm" alt="IT Specialist" width="400"/></p>
+        <p>Mon CV est disponible ici : <a href="{cv_url}">Télécharger CV</a></p>
+    </body>
+    </html>
     """, subtype="html")
 
     try:
@@ -77,47 +127,10 @@ def send_email(job, letter, language="fr"):
         print(f"[Email] Erreur : {e}")
 
 # ===========================
-# Sauvegarde dans Notion
-# ===========================
-def save_to_notion(job, language):
-    url = "https://api.notion.com/v1/pages"
-    headers = {
-        "Authorization": f"Bearer {NOTION_API_KEY}",
-        "Content-Type": "application/json",
-        "Notion-Version": "2022-06-28"
-    }
-    data = {
-        "parent": {"database_id": NOTION_DATABASE_ID},
-        "properties": {
-            "Titre": {"rich_text": [{"text": {"content": job.get("title", "Sans titre")}}]},
-            "Entreprise": {"rich_text": [{"text": {"content": job.get("company", "Inconnue")}}]},
-            "Source": {"rich_text": [{"text": {"content": job.get("source", "N/A")}}]},
-            "URL": {"url": job.get("url", "")},
-            "Langue CV": {"rich_text": [{"text": {"content": language.upper()}}]}
-        }
-    }
-    try:
-        response = requests.post(url, headers=headers, json=data)
-        if response.status_code == 200:
-            print(f"🗂 Offre enregistrée dans Notion ({job.get('title')})")
-        else:
-            print(f"[Notion] Erreur {response.status_code} : {response.text}")
-    except Exception as e:
-        print(f"[Notion] Erreur : {e}")
-
-# ===========================
-# Détection simple de la langue
-# ===========================
-def detect_language(job):
-    title = job.get("title", "").lower()
-    if any(word in title for word in ["ingeniero", "qa", "pruebas", "automatización", "tecnología"]):
-        return "es"
-    return "fr"
-
-# ===========================
 # Main
 # ===========================
 def main():
+    from scraper import scrape_all
     print("🚀 Démarrage du bot de candidature automatique...\n")
 
     jobs = scrape_all()
@@ -127,22 +140,16 @@ def main():
 
     print(f"✅ {len(jobs)} offres collectées.\n")
 
-    for i, job in enumerate(jobs[:5], 1):  # ⚠ limite à 5 pour éviter le spam
+    for i, job in enumerate(jobs[:5], 1):
         print(f"\n--- Offre {i}/{len(jobs)} ---")
         print(f"💼 {job.get('title')} chez {job.get('company')} ({job.get('source')})")
 
-        # Détection de langue
         lang = detect_language(job)
-
-        # Génération lettre de motivation
         letter = generate_cover_letter(job, lang)
         print(f"📝 Lettre générée ({lang.upper()}) :\n{letter[:200]}...\n")
 
-        # Envoi email
         send_email(job, letter, lang)
-
-        # Sauvegarde Notion
-        save_to_notion(job, lang)
+        save_to_sheet(job, lang)
 
     print("\n🎯 Processus terminé.")
 
